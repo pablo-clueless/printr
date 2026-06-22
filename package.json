@@ -1,0 +1,60 @@
+{
+  "name": "@pablo_clueless/printr",
+  "version": "0.1.4",
+  "description": "Print Markdown and text files as nicely styled PDFs.",
+  "type": "module",
+  "license": "MIT",
+  "author": "smsnmicheal <smsnmicheal@gmail.com>",
+  "homepage": "https://github.com/pablo-clueless/printr#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pablo-clueless/printr.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pablo-clueless/printr/issues"
+  },
+  "keywords": [
+    "markdown",
+    "pdf",
+    "cli",
+    "puppeteer",
+    "markdown-to-pdf",
+    "print",
+    "highlight.js",
+    "github-markdown"
+  ],
+  "bin": {
+    "printr": "dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "glob": "^11.0.0",
+    "highlight.js": "^11.10.0",
+    "markdown-it": "^14.1.0",
+    "puppeteer": "^24.15.0"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
