@@ -1,6 +1,6 @@
 {
   "name": "@pablo_clueless/printr",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Print Markdown and text files as nicely styled PDFs.",
   "type": "module",
   "license": "MIT",
