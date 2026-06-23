@@ -4,9 +4,11 @@
 
 Markdown is rendered with GitHub-flavored styling and syntax-highlighted code
 blocks, then printed to PDF through headless Chrome (Puppeteer) for high
-fidelity. Plain-text files are rendered verbatim in a clean monospace layout.
-The generated HTML is fully self-contained, so no external resources are
-fetched while rendering.
+fidelity. Source-code files (JavaScript, TypeScript, Rust, C, Python, Go, …)
+are syntax-highlighted and labelled with their filename, and any other
+plain-text file is rendered verbatim in a clean monospace layout. The
+generated HTML is fully self-contained, so no external resources are fetched
+while rendering.
 
 ## Features
 
@@ -53,6 +55,12 @@ printr "docs/**/*.md" -d out/
 # Letter paper, tighter margins
 printr notes.txt -f Letter -m 15mm
 
+# Source files are syntax-highlighted by extension
+printr src/main.rs -d out/
+
+# Force a language for an unrecognized extension
+printr Dockerfile --lang dockerfile
+
 # Watch and re-render on every save (Ctrl+C to stop)
 printr "docs/**/*.md" -d out/ --watch
 ```
@@ -69,13 +77,20 @@ rather than expanding them itself.
 | `-f, --format <fmt>` | Paper format: `A4`, `Letter`, `Legal`, … | `A4` |
 | `-m, --margin <size>` | Page margin on all sides, e.g. `20mm`, `1in` | `20mm` |
 | `-t, --title <title>` | Document title (single input only) | filename |
+| `-l, --lang <lang>` | Force the syntax-highlight language for source files, e.g. `python`, `rust` | by extension |
 | `-w, --watch` | Re-render whenever an input file changes | off |
 | `-h, --help` | Show help | |
 
 ## Supported inputs
 
 - **Markdown:** `.md`, `.markdown`, `.mdown`, `.mkd`
-- **Plain text:** anything else is rendered verbatim in monospace.
+- **Source code (syntax-highlighted):** `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`,
+  `.tsx`, `.rs`, `.c`, `.h`, `.py`, `.go`
+- **Other code:** files with an unrecognized extension are auto-detected by
+  `highlight.js` and highlighted accordingly. Use `--lang` to force a specific
+  language.
+- **Plain text:** `.txt`, `.text`, and `.log` are always rendered verbatim in
+  monospace.
 
 ## Examples
 

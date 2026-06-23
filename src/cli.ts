@@ -13,6 +13,7 @@ interface CliOptions {
   format: string;
   margin: string;
   title?: string;
+  lang?: string;
   watch?: boolean;
 }
 
@@ -21,12 +22,13 @@ const program = new Command();
 program
   .name("printr")
   .description("Print Markdown and text files as nicely styled PDFs.")
-  .argument("<inputs...>", "files or globs to convert (.md, .markdown, .txt, …)")
+  .argument("<inputs...>", "files or globs to convert (.md, .txt, .js, .ts, .rs, .c, .py, .go, …)")
   .option("-o, --output <file>", "output PDF path (single input only)")
   .option("-d, --out-dir <dir>", "directory for output PDFs (defaults beside each source)")
   .option("-f, --format <format>", "paper format: A4, Letter, Legal, …", "A4")
   .option("-m, --margin <size>", "page margin on all sides, e.g. 20mm or 1in", "20mm")
   .option("-t, --title <title>", "document title (single input only)")
+  .option("-l, --lang <lang>", "force syntax-highlight language for source files, e.g. python, rust")
   .option("-w, --watch", "watch inputs and re-render on change (Ctrl+C to stop)")
   .showHelpAfterError()
   .action(async (inputs: string[], opts: CliOptions) => {
@@ -107,6 +109,7 @@ async function run(inputs: string[], opts: CliOptions): Promise<void> {
     format: opts.format,
     margin: opts.margin,
     title: opts.title,
+    lang: opts.lang,
   };
 
   const browser = await puppeteer.launch({
