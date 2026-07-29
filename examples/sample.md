@@ -17,9 +17,9 @@ function greet(name: string): string {
 console.log(greet("world"));
 ```
 
-| Input | Output |
-| ----- | ------ |
-| `.md` | styled |
+| Input  | Output   |
+| ------ | -------- |
+| `.md`  | styled   |
 | `.txt` | verbatim |
 
 Some inline `code` and a [link](https://example.com).

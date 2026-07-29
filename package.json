@@ -1,7 +1,7 @@
 {
   "name": "@pablo_clueless/printr",
-  "version": "0.1.6",
-  "description": "Print Markdown and text files as nicely styled PDFs.",
+  "version": "0.1.7",
+  "description": "Print Markdown, Word and text files as nicely styled PDFs or Word documents.",
   "type": "module",
   "license": "MIT",
   "author": "smsnmicheal <smsnmicheal@gmail.com>",
@@ -19,6 +19,12 @@
     "cli",
     "puppeteer",
     "markdown-to-pdf",
+    "docx",
+    "docx-to-pdf",
+    "md-to-docx",
+    "markdown-to-docx",
+    "word",
+    "mammoth",
     "print",
     "highlight.js",
     "github-markdown"
@@ -45,9 +51,11 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@turbodocx/html-to-docx": "^1.22.0",
     "commander": "^12.1.0",
     "glob": "^11.0.0",
     "highlight.js": "^11.10.0",
+    "mammoth": "^1.12.0",
     "markdown-it": "^14.1.0",
     "puppeteer": "^24.15.0"
   },
