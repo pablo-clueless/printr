@@ -121,4 +121,29 @@ pre, blockquote, table, img { break-inside: avoid; }
 .hljs-attr, .hljs-attribute, .hljs-symbol, .hljs-bullet, .hljs-link { color: #e36209; }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
+
+/* Mermaid diagrams: centered, with breathing room, and a page-break-avoid
+   so a diagram never gets split across pages. */
+.mermaid-diagram {
+  text-align: center;
+  margin: 1.2em 0;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.mermaid-diagram > svg { max-width: 100%; height: auto; }
+.mermaid-diagram > img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+
+/* Fallback source shown when --no-mermaid is set or a diagram fails to parse. */
+.mermaid-error { margin: 1em 0; }
+.mermaid-error-label {
+  color: #d73a49;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  margin-bottom: 0.4em;
+  /* Mermaid's parse errors are multi-line, with a caret pointing at the
+     offending column — collapsing that whitespace makes them unreadable. */
+  white-space: pre-wrap;
+}
+.mermaid-error .mermaid-source { background: #f6f8fa; }
+.mermaid-placeholder .mermaid-source { display: none; }
 `;
