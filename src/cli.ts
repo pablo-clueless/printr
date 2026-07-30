@@ -19,6 +19,9 @@ interface CliOptions {
   lang?: string;
   to?: string;
   watch?: boolean;
+  /** Commander stores `--no-mermaid` as `mermaid: false`; it is otherwise unset. */
+  mermaid?: boolean;
+  mermaidVersion?: string;
 }
 
 const program = new Command();
@@ -28,7 +31,7 @@ program
   .description("Print Markdown, Word and text files as nicely styled PDFs or Word documents.")
   .argument(
     "<inputs...>",
-    "files or globs to convert (.md, .docx, .txt, .js, .ts, .rs, .c, .py, .go, …)",
+    "files or globs to convert (.md, .mmd, .docx, .txt, .js, .ts, .rs, .c, .py, .go, …)",
   )
   .option("-o, --output <file>", "output PDF path (single input only)")
   .option("-d, --out-dir <dir>", "directory for output PDFs (defaults beside each source)")
@@ -39,6 +42,11 @@ program
   .option(
     "-l, --lang <lang>",
     "force syntax-highlight language for source files, e.g. python, rust",
+  )
+  .option("--no-mermaid", "skip Mermaid rendering; ```mermaid blocks print as source")
+  .option(
+    "--mermaid-version <ver>",
+    "Mermaid major version to fetch (default: 11); cached under the OS user-cache dir",
   )
   .option("-w, --watch", "watch inputs and re-render on change (Ctrl+C to stop)")
   .showHelpAfterError()
@@ -115,7 +123,10 @@ async function renderOne(
     if (isDocx(file)) {
       throw new Error(`${path.basename(file)} is already a Word document`);
     }
-    data = await renderFileToDocx(file, renderOpts);
+    // Hand over the launcher rather than a browser: the .docx writer only
+    // calls it when the file actually contains Mermaid, so converting plain
+    // documents to Word still never starts Chrome.
+    data = await renderFileToDocx(file, renderOpts, getBrowser);
   } else {
     data = await renderFileToPdf(await getBrowser(), file, renderOpts);
   }
@@ -179,6 +190,8 @@ async function run(inputs: string[], opts: CliOptions): Promise<void> {
     margin: opts.margin,
     title: opts.title,
     lang: opts.lang,
+    noMermaid: opts.mermaid === false,
+    mermaid: opts.mermaidVersion ? { version: opts.mermaidVersion } : undefined,
   };
 
   // Chrome is only needed for PDF output, and launching it costs a second or

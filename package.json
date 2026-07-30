@@ -1,6 +1,6 @@
 {
   "name": "@pablo_clueless/printr",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Print Markdown, Word and text files as nicely styled PDFs or Word documents.",
   "type": "module",
   "license": "MIT",

@@ -1,9 +1,34 @@
 import { readFile } from "node:fs/promises";
-import HTMLtoDOCX from "@turbodocx/html-to-docx";
+import htmlToDocxExport from "@turbodocx/html-to-docx";
+import type { Browser } from "puppeteer";
 import path from "node:path";
 
-import { buildBodyHtml, inlineLocalImages, type RenderOptions } from "./convert.js";
+import {
+  buildBodyHtml,
+  inlineLocalImages,
+  escapeHtmlText,
+  htmlDocument,
+  type RenderOptions,
+} from "./convert.js";
+import { renderMermaidInPage, applyRenderedMermaid, registerMermaidHljs } from "./mermaid.js";
 import { githubMarkdownCss } from "./styles.js";
+import hljs from "highlight.js";
+
+// Register the Mermaid grammar so the no-browser fallback path produces a
+// syntax-highlighted code block instead of a wall of plain monospace.
+registerMermaidHljs(hljs);
+
+/**
+ * html-to-docx ships both an ESM and a UMD build. Node resolves the ESM one
+ * and hands back the function directly, but loaders that go through the UMD
+ * build (tsx, ts-node) hand back the module object instead — which is why
+ * `npm run dev -- --to docx` used to die with "HTMLtoDOCX is not a function".
+ * Unwrap whichever shape we were given.
+ */
+const HTMLtoDOCX =
+  typeof htmlToDocxExport === "function"
+    ? htmlToDocxExport
+    : (htmlToDocxExport as { default: typeof htmlToDocxExport }).default;
 
 /**
  * Word has no notion of our stylesheet, so code is styled run-by-run with
@@ -148,22 +173,78 @@ export interface DocxOptions extends RenderOptions {
   margin?: string;
 }
 
-/** Convert a Markdown, source-code or plain-text file into a .docx buffer. */
+/**
+ * Convert a Markdown, source-code or plain-text file into a .docx buffer.
+ *
+ * If the document contains Mermaid blocks and `getBrowser` is supplied, the
+ * renderer loads the same self-contained HTML shell the PDF path uses, runs
+ * Mermaid in-page, rasterizes each diagram to a high-DPI PNG, and substitutes
+ * `<img>` data URIs in place of the placeholders. The post-render body is
+ * then handed to html-to-docx with all styles inlined.
+ *
+ * `getBrowser` is a launcher rather than a `Browser` so that Chrome is only
+ * started for documents that actually contain diagrams — Word output does not
+ * otherwise need it. Without a launcher, Mermaid blocks fall back to the
+ * source-code path — a labelled, syntax-highlighted block — so the .docx is
+ * still produced.
+ */
 export async function renderFileToDocx(
   filePath: string,
   options: DocxOptions = {},
+  getBrowser?: () => Promise<Browser>,
 ): Promise<Buffer> {
   const source = await readFile(filePath, "utf8");
   const title = options.title ?? path.basename(filePath);
-  const body = await inlineLocalImages(
-    inlineStylesForDocx(buildBodyHtml(source, filePath, options)),
+
+  // Build the body HTML the same way the PDF path does, so Mermaid blocks
+  // become placeholder divs in both renderers.
+  const { body, mermaidBlocks } = buildBodyHtml(source, filePath, options);
+  let preparedBody = body;
+
+  if (mermaidBlocks.length > 0 && getBrowser) {
+    // Render Mermaid in a real page so we can rasterize each SVG to PNG
+    // before handing the body to the docx converter (which doesn't have a
+    // stylesheet or layout engine of its own).
+    const browser = await getBrowser();
+    const fullDoc = htmlDocument(body, title, options);
+    const page = await browser.newPage();
+    try {
+      await page.setContent(fullDoc, { waitUntil: "load" });
+      const render = await renderMermaidInPage(page, mermaidBlocks, options.mermaid);
+      await applyRenderedMermaid(page, mermaidBlocks, render, "png", browser);
+      preparedBody = await page.evaluate(() => {
+        const article = document.querySelector("article.markdown-body");
+        return article ? article.innerHTML : document.body.innerHTML;
+      });
+    } finally {
+      await page.close();
+    }
+  } else if (mermaidBlocks.length > 0) {
+    // No launcher was supplied, so there is no way to rasterize: swap the
+    // placeholders for plain source blocks and still emit a valid .docx.
+    // (`--no-mermaid` never gets here — `buildBodyHtml` reports no blocks at
+    // all in that case, and emits highlighted source itself.)
+    for (const block of mermaidBlocks) {
+      const highlighted = hljsFallback(block.code);
+      preparedBody = preparedBody.replace(
+        new RegExp(
+          `<div class="mermaid-placeholder" data-id="${block.id}"><pre class="mermaid-source">[\\s\\S]*?<\\/pre><\\/div>`,
+        ),
+        `<div><p style="font-family:${MONO_FONT};color:#57606a">diagram (${block.id})</p>` +
+          `<pre style="font-family:${MONO_FONT};background-color:${CODE_BG}">${highlighted}</pre></div>`,
+      );
+    }
+  }
+
+  const inlined = await inlineLocalImages(
+    inlineStylesForDocx(preparedBody),
     path.dirname(filePath),
   );
 
   const margin = toTwips(options.margin ?? "20mm") ?? 1440;
   const pageSize = PAGE_SIZES[(options.format ?? "A4").toLowerCase()];
 
-  const result = await HTMLtoDOCX(body, null, {
+  const result = await HTMLtoDOCX(inlined, null, {
     title,
     pageSize,
     margins: { top: margin, right: margin, bottom: margin, left: margin },
@@ -175,4 +256,12 @@ export async function renderFileToDocx(
   // The converter's return type covers browser builds too; on Node it is
   // always a Buffer or ArrayBuffer.
   return Buffer.isBuffer(result) ? result : Buffer.from(result as ArrayBuffer);
+}
+
+function hljsFallback(code: string): string {
+  try {
+    return hljs.highlight(code, { language: "mermaid", ignoreIllegals: true }).value;
+  } catch {
+    return escapeHtmlText(code);
+  }
 }

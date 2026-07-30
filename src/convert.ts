@@ -6,14 +6,29 @@ import mammoth from "mammoth";
 import path from "node:path";
 
 import { githubMarkdownCss } from "./styles.js";
+import {
+  extractMermaid,
+  renderMermaidInPage,
+  applyRenderedMermaid,
+  registerMermaidHljs,
+  type MermaidBundleOptions,
+  type ExtractedMermaid,
+} from "./mermaid.js";
 
 const MARKDOWN_EXTS = new Set([".md", ".markdown", ".mdown", ".mkd"]);
+
+/** Standalone Mermaid source files, treated as a single diagram. */
+const MERMAID_EXTS = new Set([".mmd", ".mermaid"]);
 
 /** Word documents, read as binary and converted through mammoth. */
 const DOCX_EXTS = new Set([".docx"]);
 
 /** Extensions always rendered verbatim, never auto-highlighted as code. */
 const PLAIN_TEXT_EXTS = new Set([".txt", ".text", ".log"]);
+
+// Register a minimal Mermaid grammar so the source-fallback path (--no-mermaid
+// or a parse error) still produces a syntax-highlighted code block.
+registerMermaidHljs(hljs);
 
 /**
  * Source-code extensions mapped to the highlight.js language they should be
@@ -47,6 +62,22 @@ export interface RenderOptions {
   lang?: string;
   /** Extra CSS appended after the built-in stylesheet. */
   extraCss?: string;
+  /**
+   * Skip Mermaid rendering. ```mermaid blocks then render as syntax-highlighted
+   * source instead of being turned into diagrams. Useful when the renderer is
+   * unavailable (no network, etc.) or to debug a document quickly.
+   */
+  noMermaid?: boolean;
+  /** Where to fetch Mermaid from. See `MermaidBundleOptions`. */
+  mermaid?: MermaidBundleOptions;
+}
+
+/** Result of extracting any Mermaid blocks from a source file. */
+export interface BodyRender {
+  /** HTML body to feed to the document shell. */
+  body: string;
+  /** Mermaid blocks discovered, in source order. Empty if the file has none. */
+  mermaidBlocks: ExtractedMermaid["blocks"];
 }
 
 const md = new MarkdownIt({
@@ -68,6 +99,9 @@ const md = new MarkdownIt({
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+
+// Exported so the .docx path can escape arbitrary text the same way.
+export { escapeHtml as escapeHtmlText };
 
 /**
  * Wrap already-highlighted code in a labelled block. `lang` may be empty when
@@ -150,8 +184,10 @@ export async function inlineLocalImages(html: string, baseDir: string): Promise<
 /**
  * Wrap rendered body HTML in the self-contained document shell shared by every
  * input type, so Markdown, source files and Word documents all print alike.
+ * Exported so the .docx path can render Mermaid diagrams in the same shell
+ * before handing the body to html-to-docx.
  */
-function htmlDocument(bodyHtml: string, title: string, options: RenderOptions): string {
+export function htmlDocument(bodyHtml: string, title: string, options: RenderOptions): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -175,20 +211,54 @@ ${options.extraCss ?? ""}</style>
  * Render a source file's contents to the body HTML — Markdown, highlighted
  * code or verbatim text. Shared by the PDF and .docx writers so both apply the
  * same rules for deciding how a file should be presented.
+ *
+ * Returns the body HTML together with any Mermaid blocks discovered during
+ * rendering, so the caller can drive an in-page Mermaid pass before the
+ * document is finalised. Mermaid is a two-stage render: the source blocks
+ * are replaced with placeholder divs here, then a real Chrome page turns
+ * them into diagrams.
  */
 export function buildBodyHtml(
-  source: string,
+  rawSource: string,
   filePath: string,
   options: RenderOptions = {},
-): string {
+): BodyRender {
+  // Editors on Windows readily write a UTF-8 BOM. Left in place it stops the
+  // first line from parsing — a leading "# Title" is no longer a heading, and
+  // Mermaid rejects the diagram keyword outright — so drop it up front.
+  const source = rawSource.charCodeAt(0) === 0xfeff ? rawSource.slice(1) : rawSource;
   const ext = path.extname(filePath).toLowerCase();
   const isMarkdown = MARKDOWN_EXTS.has(ext);
+  const isMermaid = MERMAID_EXTS.has(ext);
 
   // A forced language (--lang) overrides extension detection.
   const lang = options.lang ?? CODE_LANGS[ext];
 
+  if (isMermaid) {
+    // A standalone .mmd file is one big Mermaid block. The title comes from
+    // the filename, the diagram is centered on the page.
+    if (options.noMermaid) {
+      const highlighted = hljs.highlight(source, {
+        language: "mermaid",
+        ignoreIllegals: true,
+      }).value;
+      return {
+        body: codeFileHtml(filePath, "mermaid", highlighted),
+        mermaidBlocks: [],
+      };
+    }
+    const id = "m-0";
+    return {
+      body: `<div class="mermaid-placeholder" data-id="${id}"><pre class="mermaid-source">${escapeHtml(source)}</pre></div>`,
+      mermaidBlocks: [{ id, code: source, line: 1 }],
+    };
+  }
+
   if (isMarkdown) {
-    return md.render(source);
+    const { source: prepared, blocks } = options.noMermaid
+      ? { source, blocks: [] }
+      : extractMermaid(source);
+    return { body: md.render(prepared), mermaidBlocks: blocks };
   }
   if (lang && hljs.getLanguage(lang)) {
     // Source code with a known/forced language: highlight as that language.
@@ -196,21 +266,29 @@ export function buildBodyHtml(
       language: lang,
       ignoreIllegals: true,
     }).value;
-    return codeFileHtml(filePath, lang, highlighted);
+    return { body: codeFileHtml(filePath, lang, highlighted), mermaidBlocks: [] };
   }
   if (!lang && !PLAIN_TEXT_EXTS.has(ext)) {
     // Unknown extension: let highlight.js guess the language from the content.
     const auto = hljs.highlightAuto(source);
-    return codeFileHtml(filePath, auto.language ?? "", auto.value);
+    return {
+      body: codeFileHtml(filePath, auto.language ?? "", auto.value),
+      mermaidBlocks: [],
+    };
   }
   // Plain text: preserve it verbatim inside a code block.
-  return `<pre class="plain-text">${escapeHtml(source)}</pre>`;
+  return { body: `<pre class="plain-text">${escapeHtml(source)}</pre>`, mermaidBlocks: [] };
 }
 
 /** Build the full self-contained HTML document for a source file. */
-export function buildHtml(source: string, filePath: string, options: RenderOptions = {}): string {
+export function buildHtml(
+  source: string,
+  filePath: string,
+  options: RenderOptions = {},
+): { html: string; mermaidBlocks: ExtractedMermaid["blocks"] } {
   const title = options.title ?? path.basename(filePath);
-  return htmlDocument(buildBodyHtml(source, filePath, options), title, options);
+  const { body, mermaidBlocks } = buildBodyHtml(source, filePath, options);
+  return { html: htmlDocument(body, title, options), mermaidBlocks };
 }
 
 /**
@@ -279,16 +357,21 @@ export async function renderFileToPdf(
     );
   }
 
-  const html = isDocx(filePath)
-    ? await buildDocxHtml(filePath, options)
-    : await inlineLocalImages(
-        buildHtml(await readFile(filePath, "utf8"), filePath, options),
-        path.dirname(filePath),
-      );
+  const { html, mermaidBlocks } = isDocx(filePath)
+    ? { html: await buildDocxHtml(filePath, options), mermaidBlocks: [] }
+    : await (async () => {
+        const built = buildHtml(await readFile(filePath, "utf8"), filePath, options);
+        const inlined = await inlineLocalImages(built.html, path.dirname(filePath));
+        return { html: inlined, mermaidBlocks: built.mermaidBlocks };
+      })();
 
   const page = await browser.newPage();
   try {
     await page.setContent(html, { waitUntil: "load" });
+    if (mermaidBlocks.length > 0) {
+      const render = await renderMermaidInPage(page, mermaidBlocks, options.mermaid);
+      await applyRenderedMermaid(page, mermaidBlocks, render, "svg", browser);
+    }
     const margin = options.margin ?? "20mm";
     return await page.pdf({
       format: (options.format ?? "A4") as never,

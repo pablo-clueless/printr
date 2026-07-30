@@ -22,6 +22,7 @@ nothing is fetched when the file is opened later.
 - 📝 Word `.docx` output with syntax highlighting preserved (`--to docx`)
 - 📥 Word `.docx` input: headings, lists, tables, images and links
 - 🎨 Syntax highlighting for code blocks via `highlight.js`
+- 🧜 Mermaid diagrams, both in ` ```mermaid ` blocks and as standalone `.mmd` files
 - 📁 Batch conversion with glob patterns, reusing one browser for speed
 - 👀 `--watch` mode that re-renders on every save
 - 🧾 Plain-text files rendered verbatim in monospace
@@ -83,6 +84,12 @@ printr src/main.rs -d out/
 # Force a language for an unrecognized extension
 printr Dockerfile --lang dockerfile
 
+# A standalone Mermaid file becomes a one-diagram document
+printr architecture.mmd
+
+# Print Mermaid blocks as source instead of rendering them
+printr design-doc.md --no-mermaid
+
 # Watch and re-render on every save (Ctrl+C to stop)
 printr "docs/**/*.md" -d out/ --watch
 ```
@@ -101,12 +108,15 @@ rather than expanding them itself.
 | `-t, --title <title>` | Document title (single input only)                                          | filename              |
 | `--to <format>`       | Output format: `pdf` or `docx`                                              | from `-o`, else `pdf` |
 | `-l, --lang <lang>`   | Force the syntax-highlight language for source files, e.g. `python`, `rust` | by extension          |
+| `--no-mermaid`        | Skip diagram rendering; Mermaid blocks print as highlighted source          | off                   |
+| `--mermaid-version`   | Mermaid major version to fetch                                              | `11`                  |
 | `-w, --watch`         | Re-render whenever an input file changes                                    | off                   |
 | `-h, --help`          | Show help                                                                   |                       |
 
 ## Supported inputs
 
 - **Markdown:** `.md`, `.markdown`, `.mdown`, `.mkd`
+- **Mermaid:** `.mmd`, `.mermaid` — rendered as a single diagram
 - **Word:** `.docx`
 - **Source code (syntax-highlighted):** `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`,
   `.tsx`, `.rs`, `.c`, `.h`, `.py`, `.go`
@@ -141,6 +151,36 @@ are preserved exactly.
 Because Word has no stylesheet, styling is applied run by run rather than by
 CSS, so the result is close to the PDF but not identical — page-break tuning in
 particular is left to Word.
+
+## Mermaid diagrams
+
+Fenced ` ```mermaid ` blocks in Markdown are rendered as diagrams, and a
+standalone `.mmd` / `.mermaid` file is treated as one diagram filling the page:
+
+```bash
+printr architecture.mmd
+printr design-doc.md --to docx
+```
+
+In a PDF the diagram is embedded as vector SVG, so it stays sharp at any zoom.
+Word has no SVG support worth relying on, so the `--to docx` path rasterizes
+each diagram to a high-DPI PNG scaled to the printable column width.
+
+Rendering happens in the same headless Chrome instance that prints the PDF, so
+there is no extra dependency — but Mermaid's browser bundle (~3.4 MB) is
+downloaded from jsDelivr the first time a diagram is actually rendered, then
+cached under the OS cache directory and reused. To work entirely offline, point
+`PRINTR_MERMAID_PATH` at a local copy of `mermaid.min.js`; it is then used
+verbatim and the network is never touched.
+
+A diagram that fails to parse does not fail the document: printr logs the
+error and falls back to printing that block's source, syntax-highlighted and
+labelled with the parser message, so the rest of the file still renders. Pass
+`--no-mermaid` to skip diagram rendering entirely and print every block as
+source.
+
+Because Word output only needs Chrome for diagrams, a `.docx` conversion with
+no Mermaid blocks in it still never launches a browser.
 
 ### Word input
 
