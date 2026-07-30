@@ -1,0 +1,10 @@
+gantt
+  title A release cycle
+  dateFormat YYYY-MM-DD
+  section Plan
+    Spec         :a1, 2026-01-01, 7d
+  section Build
+    Implementation :a2, after a1, 14d
+    Review         :a3, after a2, 5d
+  section Ship
+    Release        :a4, after a3, 2d
