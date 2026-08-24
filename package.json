@@ -4,6 +4,7 @@
   "description": "Print Markdown, Word and text files as nicely styled PDFs or Word documents.",
   "type": "module",
   "license": "MIT",
+  "packageManager": "pnpm@10.18.1",
   "author": "smsnmicheal <smsnmicheal@gmail.com>",
   "homepage": "https://github.com/pablo-clueless/printr#readme",
   "repository": {
