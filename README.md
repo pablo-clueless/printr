@@ -32,13 +32,13 @@ nothing is fetched when the file is opened later.
 Run it on demand without installing:
 
 ```bash
-npx @pablo_clueless/printr report.md
+npx @pablo-clueless/printr report.md
 ```
 
 Or install globally to get the `printr` command everywhere:
 
 ```bash
-npm install -g @pablo_clueless/printr
+npm install -g @pablo-clueless/printr
 ```
 
 > **Chromium download:** on first install Puppeteer downloads a matching
